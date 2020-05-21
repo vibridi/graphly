@@ -25,29 +25,21 @@ type LayeredOptions struct {
 func NewLayeredOptions() LayeredOptions {
 	return LayeredOptions{
 		// set the defaults
-		totalPhases: 5,
+		totalPhases:           5,
+		CycleBreakingStrategy: CycleBreakingStrategy_GREEDY,
 	}
 }
 
 func Layered(graph *Graph, opts LayeredOptions) {
-	layout := layeredLayout{opts}
-
 	// algorithm assembler
 	asm := newAlgorithmAssembler(opts.totalPhases)
-	asm.addPhase(phase1_CYCLE_BREAKING, layout.phase1Factory())
+	asm.addPhase(phase1_CYCLE_BREAKING, layeredPhase1Factory(opts.CycleBreakingStrategy))
+	// todo add post-processing step restore reversed edges after p5
 
 	// for p in asm.algorithm [list of processors]
 	// p(graph)
 
-	for _, f := range asm.algorithm() {
-		f(graph)
+	for _, processor := range asm.algorithm() {
+		processor.process(graph)
 	}
-}
-
-type layeredLayout struct {
-	opts LayeredOptions
-}
-
-func (l *layeredLayout) algorithmStrategy() {
-
 }

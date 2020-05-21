@@ -1,40 +1,34 @@
 package graphly
 
-type processor func(graph *Graph)
-
-type processorList []processor
-
-func (pl *processorList) push(p processor) {
-	if pl == nil {
-		n := make(processorList, 0)
-		pl = &n
-	}
-	*pl = append(*pl, p)
+type processor interface {
+	process(graph *Graph)
 }
 
+// Represents a major phase of an autolayout algorithm,
+// including pre- and post-processing steps. Implements process interface
 type phase struct {
 	main           processor
-	preprocessors  processorList
-	postprocessors processorList
+	preprocessors  []processor
+	postprocessors []processor
 }
 
-func (p *phase) run(graph *Graph) {
+func (p *phase) process(graph *Graph) {
 	for _, p := range p.preprocessors {
-		p(graph)
+		p.process(graph)
 	}
-	p.main(graph)
+	p.main.process(graph)
 	for _, p := range p.postprocessors {
-		p(graph)
+		p.process(graph)
 	}
 }
 
 type assembler struct {
-	phases []phase
+	phases []*phase
 }
 
 func newAlgorithmAssembler(totalPhases uint8) *assembler {
 	return &assembler{
-		phases: make([]phase, totalPhases),
+		phases: make([]*phase, totalPhases),
 	}
 }
 
@@ -43,17 +37,19 @@ func (asm *assembler) addPhase(phase uint8, proc processor) {
 }
 
 func (asm *assembler) addPreProcessor(proc processor, beforePhase uint8) {
-	asm.phases[beforePhase].preprocessors.push(proc)
+	pre := &asm.phases[beforePhase].preprocessors
+	*pre = append(*pre, proc)
 }
 
 func (asm *assembler) addPostProcessor(proc processor, afterPhase uint8) {
-	asm.phases[afterPhase].postprocessors.push(proc)
+	post := &asm.phases[afterPhase].postprocessors
+	*post = append(*post, proc)
 }
 
 func (asm *assembler) algorithm() []processor {
 	procs := make([]processor, len(asm.phases))
 	for i, phase := range asm.phases {
-		procs[i] = phase.run
+		procs[i] = phase
 	}
 	return procs
 }
