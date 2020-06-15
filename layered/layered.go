@@ -1,4 +1,8 @@
-package graphly
+package layered
+
+import (
+	"github.com/vibridi/graphly"
+)
 
 const (
 	phase1_CYCLE_BREAKING = iota
@@ -17,20 +21,22 @@ const (
 
 // Maybe unexported. Build with all the defaults
 // Could also be zero values
-type LayeredOptions struct {
+type Options struct {
 	totalPhases           uint8
 	CycleBreakingStrategy CycleBreakingStrategy
 }
 
-func NewLayeredOptions() LayeredOptions {
-	return LayeredOptions{
+func NewOptions() Options {
+	return Options{
 		// set the defaults
 		totalPhases:           5,
 		CycleBreakingStrategy: CycleBreakingStrategy_GREEDY,
 	}
 }
 
-func Layered(graph *Graph, opts LayeredOptions) {
+func Layout(root *graphly.Node, opts Options) {
+	lgraph := convert(root)
+
 	// algorithm assembler
 	asm := newAlgorithmAssembler(opts.totalPhases)
 	asm.addPhase(phase1_CYCLE_BREAKING, layeredPhase1Factory(opts.CycleBreakingStrategy))
@@ -40,6 +46,6 @@ func Layered(graph *Graph, opts LayeredOptions) {
 	// p(graph)
 
 	for _, processor := range asm.algorithm() {
-		processor.process(graph)
+		processor.process(lgraph)
 	}
 }

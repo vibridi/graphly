@@ -1,11 +1,11 @@
-package graphly
+package layered
 
 import (
 	"errors"
 	"fmt"
 	"math"
 
-	"github.com/vibridi/graphly/internal/utils"
+	"github.com/vibridi/graphly/internal"
 )
 
 func layeredPhase1Factory(strat CycleBreakingStrategy) processor {
@@ -46,6 +46,7 @@ func (p *greedyCycleBreaker) addSink(n *Node) {
 
 func (p *greedyCycleBreaker) takeSink() *Node {
 	n := p.sinks[0]
+	p.sinks[0] = nil
 	p.sinks = p.sinks[1:]
 	return n
 }
@@ -60,6 +61,7 @@ func (p *greedyCycleBreaker) addSource(n *Node) {
 
 func (p *greedyCycleBreaker) takeSource() *Node {
 	n := p.sources[0]
+	p.sources[0] = nil
 	p.sources = p.sources[1:]
 	return n
 }
@@ -72,7 +74,7 @@ func (p *greedyCycleBreaker) takeSource() *Node {
 // Then it reverses edges that point left.
 func (p *greedyCycleBreaker) process(graph *Graph) {
 
-	p.init(graph.nodes)
+	p.init(graph.Nodes)
 
 	// preliminary step: compute node degrees and collect sources and sinks
 	for i, node := range p.nodes {
@@ -154,7 +156,7 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 			}
 
 			// randomly select a node from the ones with maximal outflow and put it left
-			maxOutN := maxOutSet[utils.RandInt(len(maxOutSet))]
+			maxOutN := maxOutSet[internal.RandInt(len(maxOutSet))]
 			nextLeft++
 			p.arcdiag[maxOutN.id] = nextLeft
 			p.updateNeighbors(maxOutN)
@@ -178,7 +180,7 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 		for _, port := range node.ports {
 			for _, e := range port.outEdges {
 				if p.arcdiag[node.id] > p.arcdiag[e.target.owner.id] {
-					// reverse edge
+					e.reverse()
 					graph.isCyclic = true
 				}
 			}
@@ -223,7 +225,6 @@ func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 					p.sources = append(p.sources, targetNode)
 				}
 			}
-
 		}
 	}
 }

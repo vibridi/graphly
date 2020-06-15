@@ -1,4 +1,4 @@
-package graphly
+package layered
 
 type processor interface {
 	process(graph *Graph)
