@@ -9,14 +9,31 @@ import (
 // Nodes, Ports, Labels, Edges, and Edge Sections
 
 type Graph struct {
-	Nodes    []*Node
-	isCyclic bool
+	Nodes        []*Node
+	isCyclic     bool
+	hasSelfLoops bool
+}
+
+// placeholder func for now
+func (g *Graph) copyProperties(that *Graph) {
+	g.isCyclic = that.isCyclic
+	g.hasSelfLoops = that.hasSelfLoops
 }
 
 type Node struct {
-	id    int
+	id    string
+	seq   int
 	layer int
 	ports []*Port
+}
+
+func (n *Node) String() string {
+	return n.id
+}
+
+func (n *Node) addPort(p *Port) {
+	p.owner = n
+	n.ports = append(n.ports, p)
 }
 
 type PortSide uint8
@@ -29,6 +46,7 @@ const (
 )
 
 type Port struct {
+	id       string
 	owner    *Node
 	side     PortSide
 	anchor   point
@@ -55,6 +73,7 @@ func (p Port) Len() int {
 // }
 
 type Edge struct {
+	id                string
 	bends             []point
 	source            *Port
 	target            *Port
@@ -75,82 +94,109 @@ type point struct {
 	y float32
 }
 
-func convert(g *graphly.Node) *Graph {
-	return nil
+func toLayeredGraph(src *graphly.Node) *Graph {
+	lgraph := &Graph{}
+	portmap := make(map[string]*Port, 0)
+	edgemap := make(map[string]*Edge, 0)
+
+	for _, thatNode := range src.Children {
+		thisNode := &Node{id: thatNode.ID}
+		for _, thatPort := range thatNode.Ports {
+			thisPort := &Port{
+				id:     thatPort.ID,
+				anchor: point{thatPort.X, thatPort.Y},
+			}
+			thisNode.addPort(thisPort)
+			portmap[thatPort.ID] = thisPort
+		}
+		lgraph.Nodes = append(lgraph.Nodes, thisNode)
+	}
+
+	for _, thatEdge := range src.Edges {
+		thisEdge := edgemap[thatEdge.ID]
+		if thisEdge == nil {
+			thisEdge = &Edge{id: thatEdge.ID}
+			edgemap[thatEdge.ID] = thisEdge
+		}
+
+		sourcePort := portmap[thatEdge.Sources[0]]
+		thisEdge.source = sourcePort
+		sourcePort.outEdges = append(sourcePort.outEdges, thisEdge)
+
+		targetPort := portmap[thatEdge.Targets[0]]
+		thisEdge.target = targetPort
+		targetPort.inEdges = append(targetPort.inEdges, thisEdge)
+
+		if sourcePort.id == targetPort.id {
+			lgraph.hasSelfLoops = true
+		}
+	}
+
+	return lgraph
 }
 
-// func FromJSON(jsonBytes []byte) (*Graph, error) {
-// 	root := &jsonNode{}
-// 	if err := json.Unmarshal(jsonBytes, root); err != nil {
-// 		return nil, errors.Wrap(err, "graphly: failed to unmarshal json source")
-// 	}
-// 	return newImporter().fromJSON(root), nil
-// }
+// Split the graph into connected components. In ELK this depends on the SEPARATE_CONNECTED_COMPONENTS property
+// external ports and port constraints. For now we ignore that and split regardless.
+func split(lgraph *Graph) []*Graph {
+	for _, n := range lgraph.Nodes {
+		n.seq = 0
+	}
+	res := make([]*Graph, 0)
+	for _, n := range lgraph.Nodes {
+
+		// find connected components
+		compNs := dfs(n, nil)
+
+		if len(compNs) != 0 {
+			compG := &Graph{}
+			compG.copyProperties(lgraph)
+			// set EXT_PORT_CONNECTIONS if needed
+			// copy padding if needed
+			// remove minimum size if needed
+
+			for _, m := range compNs {
+				compG.Nodes = append(compG.Nodes, m)
+				// set graph to node if needed
+			}
+			res = append(res, compG)
+		}
+	}
+
+	return res
+}
+
 //
-// func newImporter() *jsonImporter {
-// 	return &jsonImporter{}
-// }
-//
-// type jsonImporter struct {
-// 	nodemap map[string]*Node
-// 	portmap map[string]*Port
-// 	edgemap map[string]*Edge
-// }
-//
-// // todo essentially export this and make jsonNode the standard way to declare graphs (which also supports json)
-// func (j *jsonImporter) fromJSON(root *jsonNode) *Graph {
-// 	// todo handle graph-level properties
-//
-// 	for _, n := range root.Children {
-// 		j.importNode(n)
-// 	}
-// 	return j.build()
-// }
-//
-// func (j *jsonImporter) importNode(jsonNode *jsonNode) {
-// 	// node properties not supported
-// 	// node labels not supported
-//
-// 	n := &Node{
-// 		// add pos and size
-// 		ports: j.importPorts(jsonNode.Ports),
-// 	}
-// 	j.nodemap[jsonNode.ID] = n
-//
-// 	// child nodes not supported
-// }
-//
-// func (j *jsonImporter) importPorts(jsonPorts []*jsonPort) []*Port {
-//
-// }
-//
-// func (j *jsonImporter) importEdges(jsonEdges []*jsonEdge) {
-// 	if len(jsonEdges) == 0 {
-// 		return
-// 	}
-// 	for _, jsonEdge := range jsonEdges {
-// 		if len(jsonEdge.Sources) == 0 {
-// 			// todo
-// 		}
-// 		if len(jsonEdge.Targets) == 0 {
-// 			// todo
-// 		}
-// 		edge := &Edge{}
-//
-// 		src := jsonEdge.Sources[0]
-// 		if n := j.nodemap[src]; n != nil {
-// 			edge.source = n
-// 		}
-//
-// 	}
-// }
-//
-// func (j *jsonImporter) build() *Graph {
-// 	nodes := make([]*Node, 0, len(j.nodemap))
-// 	for _, n := range j.nodemap {
-// 		nodes = append(nodes, n)
-// 	}
-// 	return &Graph{
-// 		Nodes: nodes,
-// 	}
-// }
+//    /**
+//     * Perform a DFS starting on the given node, collect all nodes that are found in the corresponding
+//     * connected component and return the set of external port sides the component connects to.
+//     *
+//     * @param node a node.
+//     * @param data pair of nodes in the component and external port sides used to produce the result
+//     *             during recursive calls. Should be {@code null} when this method is called.
+//     * @return a pairing of the connected component and the set of port sides of external ports it
+//     *         connects to, or {@code null} if the node was already visited
+//     */
+
+func dfs(node *Node, connectedNodes []*Node) []*Node {
+	if node.seq != 0 {
+		// already visited
+		return connectedNodes
+	}
+
+	// mark the node as visited
+	node.seq = 1
+	connectedNodes = append(connectedNodes, node)
+
+	// check if this node is an external port dummy if needed
+
+	for _, p := range node.ports {
+		for _, in := range p.inEdges {
+			connectedNodes = dfs(in.source.owner, connectedNodes)
+		}
+		for _, out := range p.outEdges {
+			connectedNodes = dfs(out.target.owner, connectedNodes)
+		}
+
+	}
+	return connectedNodes
+}

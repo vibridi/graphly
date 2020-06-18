@@ -35,7 +35,8 @@ func NewOptions() Options {
 }
 
 func Layout(root *graphly.Node, opts Options) {
-	lgraph := convert(root)
+	lgraph := toLayeredGraph(root)
+	components := split(lgraph)
 
 	// algorithm assembler
 	asm := newAlgorithmAssembler(opts.totalPhases)
@@ -45,7 +46,9 @@ func Layout(root *graphly.Node, opts Options) {
 	// for p in asm.algorithm [list of processors]
 	// p(graph)
 
-	for _, processor := range asm.algorithm() {
-		processor.process(lgraph)
+	for _, comp := range components {
+		for _, processor := range asm.algorithm() {
+			processor.process(comp)
+		}
 	}
 }

@@ -78,13 +78,13 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 
 	// preliminary step: compute node degrees and collect sources and sinks
 	for i, node := range p.nodes {
-		// the node id is used as index for the indegrees, outdegrees, and arcdiag arrays
-		node.id = i
+		// the node seq is used as index for the indegrees, outdegrees, and arcdiag arrays
+		node.seq = i
 
 		for _, port := range node.ports {
 			for _, inEdge := range port.inEdges {
 				// ignore self-loops
-				if inEdge.source.owner == node {
+				if inEdge.source.owner.id == node.id {
 					continue
 				}
 				p.indegrees[i] += int(inEdge.PriorityDirection) + 1
@@ -92,7 +92,7 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 
 			for _, outEdge := range port.outEdges {
 				// ignore self-loops
-				if outEdge.source.owner == node {
+				if outEdge.target.owner.id == node.id {
 					continue
 				}
 				p.outdegrees[i] += int(outEdge.PriorityDirection) + 1
@@ -116,19 +116,18 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 
 	unprocessed := len(p.nodes)
 	for unprocessed > 0 {
-
 		for len(p.sinks) > 0 {
 			sink := p.takeSink()
+			p.arcdiag[sink.seq] = nextRight
 			nextRight--
-			p.arcdiag[sink.id] = nextRight
 			p.updateNeighbors(sink)
 			unprocessed--
 		}
 
 		for len(p.sources) > 0 {
 			source := p.takeSource()
+			p.arcdiag[source.seq] = nextLeft
 			nextLeft++
-			p.arcdiag[source.id] = nextLeft
 			p.updateNeighbors(source)
 			unprocessed--
 		}
@@ -140,8 +139,8 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 			maxOutSet := make([]*Node, 0)
 
 			for _, node := range p.nodes {
-				if p.arcdiag[node.id] == 0 {
-					outflow := p.outdegrees[node.id] - p.indegrees[node.id]
+				if p.arcdiag[node.seq] == 0 {
+					outflow := p.outdegrees[node.seq] - p.indegrees[node.seq]
 					if outflow >= maxOutflow {
 						if outflow > maxOutflow {
 							maxOutSet = nil
@@ -157,8 +156,8 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 
 			// randomly select a node from the ones with maximal outflow and put it left
 			maxOutN := maxOutSet[internal.RandInt(len(maxOutSet))]
+			p.arcdiag[maxOutN.seq] = nextLeft
 			nextLeft++
-			p.arcdiag[maxOutN.id] = nextLeft
 			p.updateNeighbors(maxOutN)
 			unprocessed--
 		}
@@ -179,7 +178,7 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 	for _, node := range p.nodes {
 		for _, port := range node.ports {
 			for _, e := range port.outEdges {
-				if p.arcdiag[node.id] > p.arcdiag[e.target.owner.id] {
+				if p.arcdiag[node.seq] > p.arcdiag[e.target.owner.seq] {
 					e.reverse()
 					graph.isCyclic = true
 				}
@@ -200,7 +199,7 @@ func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 				continue
 			}
 
-			id := sourceNode.id
+			id := sourceNode.seq
 			// if the source node is still unprocessed
 			if p.arcdiag[id] == 0 {
 				p.outdegrees[id] -= int(inEdge.PriorityDirection) + 1
@@ -217,7 +216,7 @@ func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 				continue
 			}
 
-			id := targetNode.id
+			id := targetNode.seq
 			// if the target node is still unprocessed
 			if p.arcdiag[id] == 0 {
 				p.indegrees[id] -= int(outEdge.PriorityDirection) + 1

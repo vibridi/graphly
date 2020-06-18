@@ -37,6 +37,9 @@ func visit(cycle *bool, adj map[string][]string, nid string, discovered, finishe
 	discovered[nid] = true
 
 	for _, vid := range adj[nid] {
+		if nid == vid {
+			continue // ignore self loops
+		}
 		if discovered[vid] {
 			*cycle = true
 			break

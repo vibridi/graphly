@@ -37,6 +37,7 @@ type Edge struct {
 	// Sections
 }
 
+// Returns a map from ports to their owner nodes.
 func (root *Node) PortMap() map[string]string {
 	m := make(map[string]string, 0)
 	for _, n := range root.Children {
@@ -47,6 +48,7 @@ func (root *Node) PortMap() map[string]string {
 	return m
 }
 
+// Returns the adjacency list of this graph. The map is from a port to its connected ports.
 func (root *Node) AdjacencyList() map[string][]string {
 	adj := make(map[string][]string, len(root.Children))
 	portmap := root.PortMap()
