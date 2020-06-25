@@ -2,6 +2,7 @@ package layered
 
 import (
 	"github.com/vibridi/graphly"
+	"github.com/vibridi/graphly/internal"
 )
 
 // graph type
@@ -21,10 +22,10 @@ func (g *Graph) copyProperties(that *Graph) {
 }
 
 type Node struct {
-	id    string
-	seq   int
-	layer int
-	ports []*Port
+	id    string  // (possibly) unique identifier
+	seq   int     // sequence number used to track this node in algorithms
+	layer int     // layer this node belongs to
+	ports []*Port // list of ports
 }
 
 func (n *Node) String() string {
@@ -54,23 +55,35 @@ type Port struct {
 	outEdges []*Edge // outgoing edges
 }
 
-// todo name
-func (p Port) Len() int {
-	return len(p.inEdges) + len(p.outEdges)
+func (p *Port) addInEdge(e *Edge) {
+	p.inEdges = append(p.inEdges, e)
 }
 
-// func (p Port) edge(i int) *Edge {
-// 	switch {
-// 	case i < len(p.inEdges):
-// 		return p.inEdges[i]
-//
-// 	case i < len(p.outEdges)+len(p.inEdges):
-// 		return p.outEdges[i-len(p.inEdges)]
-//
-// 	default:
-// 		return nil
-// 	}
-// }
+func (p *Port) removeInEdge(e *Edge) {
+	j := 0
+	for i := 0; i < len(p.inEdges); i++ {
+		if p.inEdges[i].id != e.id {
+			p.inEdges[j] = p.inEdges[i]
+			j++
+		}
+	}
+	p.inEdges = p.inEdges[:j]
+}
+
+func (p *Port) addOutEdge(e *Edge) {
+	p.outEdges = append(p.outEdges, e)
+}
+
+func (p *Port) removeOutEdge(e *Edge) {
+	j := 0
+	for i := 0; i < len(p.outEdges); i++ {
+		if p.outEdges[i].id != e.id {
+			p.outEdges[j] = p.outEdges[i]
+			j++
+		}
+	}
+	p.outEdges = p.outEdges[:j]
+}
 
 type Edge struct {
 	id                string
@@ -81,17 +94,29 @@ type Edge struct {
 	PriorityDirection uint
 }
 
+func (e *Edge) String() string {
+	return e.source.owner.id + "->" + e.target.owner.id
+}
+
 func (e *Edge) reverse() {
 	oldsrc := e.source
 	oldtgt := e.target
+	oldsrc.removeOutEdge(e)
+	oldtgt.removeInEdge(e)
 	e.target = oldsrc
 	e.source = oldtgt
+	e.target.addInEdge(e)
+	e.source.addOutEdge(e)
 	e.isReversed = !e.isReversed
 }
 
 type point struct {
 	x float32
 	y float32
+}
+
+func fromJson(src *internal.GraphData) *Graph {
+	return toLayeredGraph(graphly.FromJson(src.Data, src.Name))
 }
 
 func toLayeredGraph(src *graphly.Node) *Graph {
@@ -165,18 +190,7 @@ func split(lgraph *Graph) []*Graph {
 	return res
 }
 
-//
-//    /**
-//     * Perform a DFS starting on the given node, collect all nodes that are found in the corresponding
-//     * connected component and return the set of external port sides the component connects to.
-//     *
-//     * @param node a node.
-//     * @param data pair of nodes in the component and external port sides used to produce the result
-//     *             during recursive calls. Should be {@code null} when this method is called.
-//     * @return a pairing of the connected component and the set of port sides of external ports it
-//     *         connects to, or {@code null} if the node was already visited
-//     */
-
+// Runs a DFS finding the connected nodes
 func dfs(node *Node, connectedNodes []*Node) []*Node {
 	if node.seq != 0 {
 		// already visited

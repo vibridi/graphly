@@ -8,36 +8,42 @@ import (
 )
 
 func TestGreedyCycleBreaker(t *testing.T) {
-	gs := internal.ReadTestFilesAll(internal.DirCyclic)
+	cases := internal.ReadTestFilesAll(dirCyclic)
 
-	for _, g := range gs {
-		t.Run("test "+g.ID, func(t *testing.T) {
-			assert.True(t, hasCycles(g))
-
-			lg := toLayeredGraph(g)
-
-			for _, gpart := range split(lg) {
-				assert.False(t, gpart.isCyclic)
-				cb := &greedyCycleBreaker{}
-				cb.process(gpart)
-
-				reversedEdges := findReversedEdges(gpart)
-				if len(reversedEdges) != 0 {
-					assert.True(t, gpart.isCyclic)
-				}
-				for _, e := range g.Edges {
-					if reversedEdges[e.ID] != nil {
-						tmp := e.Sources
-						e.Sources = e.Targets
-						e.Targets = tmp
-					}
-				}
-			}
-
-			assert.False(t, hasCycles(g))
+	for _, test := range cases {
+		t.Run(test.Name, func(t *testing.T) {
+			testCycleBreaker(t, test, &greedyCycleBreaker{})
 		})
 	}
+}
 
+func TestDepthFirstCycleBreaker(t *testing.T) {
+	cases := internal.ReadTestFilesAll(dirCyclic)
+
+	for _, test := range cases {
+		t.Run(test.Name, func(t *testing.T) {
+			testCycleBreaker(t, test, &depthFirstCycleBreaker{})
+		})
+	}
+}
+
+func testCycleBreaker(t *testing.T, test *internal.GraphData, proc processor) {
+	lg := fromJson(test)
+	assert.True(t, lg.hasCycles())
+
+	for _, gpart := range split(lg) {
+		assert.False(t, gpart.isCyclic)
+
+		cb := &depthFirstCycleBreaker{}
+		cb.process(gpart)
+
+		reversedEdges := findReversedEdges(gpart)
+		if len(reversedEdges) != 0 {
+			assert.True(t, gpart.isCyclic)
+		}
+		assert.False(t, gpart.hasCycles())
+	}
+	assert.False(t, lg.hasCycles())
 }
 
 func findReversedEdges(g *Graph) map[string]*Edge {

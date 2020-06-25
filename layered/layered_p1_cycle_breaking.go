@@ -8,6 +8,10 @@ import (
 	"github.com/vibridi/graphly/internal"
 )
 
+// -----------------------
+// 	Phase 1 Factory
+// -----------------------
+
 func layeredPhase1Factory(strat CycleBreakingStrategy) processor {
 	switch strat {
 	case CycleBreakingStrategy_GREEDY:
@@ -18,6 +22,10 @@ func layeredPhase1Factory(strat CycleBreakingStrategy) processor {
 	}
 	panic(errors.New(fmt.Sprintf("unsupported cycle breaking strategy: %d", strat)))
 }
+
+// -----------------------
+// 	Greedy Cycle Breaker
+// -----------------------
 
 // Greedy cycle breaking strategy. Implements processor interface
 type greedyCycleBreaker struct {
@@ -97,7 +105,6 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 				}
 				p.outdegrees[i] += int(outEdge.PriorityDirection) + 1
 			}
-
 		}
 
 		switch {
@@ -174,16 +181,23 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 	// now nodes are arranged from left to right based on their outflow:
 	// sources (0 indegree) -- other non-sinks ordered from greatest to smallest outflow -- sinks (0 outdegree)
 
+	// remember edges to avoid modifying slices in place
+	rev := make([]*Edge, 0)
+
 	// reverse edges that point left
 	for _, node := range p.nodes {
 		for _, port := range node.ports {
-			for _, e := range port.outEdges {
-				if p.arcdiag[node.seq] > p.arcdiag[e.target.owner.seq] {
-					e.reverse()
+			for _, edge := range port.outEdges {
+				if p.arcdiag[node.seq] > p.arcdiag[edge.target.owner.seq] {
+					rev = append(rev, edge)
 					graph.isCyclic = true
 				}
 			}
 		}
+	}
+
+	for _, edge := range rev {
+		edge.reverse()
 	}
 }
 
@@ -192,7 +206,7 @@ func (p *greedyCycleBreaker) process(graph *Graph) {
 func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 	for _, port := range node.ports {
 
-		// Simulate removal of an edge target node. The outdegree of its source nodes decreases.
+		// simulate removal of an edge target node: the outdegree of its source nodes decreases.
 		for _, inEdge := range port.inEdges {
 			sourceNode := inEdge.source.owner
 			if node == sourceNode {
@@ -209,18 +223,18 @@ func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 			}
 		}
 
-		// Simulate removal of an edge source node. The indegree of its target nodes decreases.
+		// simulate removal of an edge source node: the indegree of its target nodes decreases.
 		for _, outEdge := range port.outEdges {
 			targetNode := outEdge.target.owner
 			if node == targetNode {
 				continue
 			}
 
-			id := targetNode.seq
+			seq := targetNode.seq
 			// if the target node is still unprocessed
-			if p.arcdiag[id] == 0 {
-				p.indegrees[id] -= int(outEdge.PriorityDirection) + 1
-				if p.indegrees[id] <= 0 && p.outdegrees[id] > 0 {
+			if p.arcdiag[seq] == 0 {
+				p.indegrees[seq] -= int(outEdge.PriorityDirection) + 1
+				if p.indegrees[seq] <= 0 && p.outdegrees[seq] > 0 {
 					p.sources = append(p.sources, targetNode)
 				}
 			}
@@ -228,10 +242,100 @@ func (p *greedyCycleBreaker) updateNeighbors(node *Node) {
 	}
 }
 
+// -----------------------
+// 	DFS Cycle Breaker
+// -----------------------
+
 // Depth-first cycle breaking strategy. Implements processor interface
 type depthFirstCycleBreaker struct {
+	nodes   []*Node
+	visited []int
+	roots   []int
+	sources []*Node // nodes with no incoming edges
+}
+
+func (p *depthFirstCycleBreaker) init(nodes []*Node) {
+	p.nodes = nodes
+	p.visited = make([]int, len(nodes))
+	for i := range p.visited {
+		p.visited[i] = -1
+	}
+	p.roots = make([]int, len(nodes))
+	for i := range p.roots {
+		p.roots[i] = -1
+	}
 }
 
 func (p *depthFirstCycleBreaker) process(graph *Graph) {
-	panic("not implemented")
+
+	p.init(graph.Nodes)
+
+	// collect all sources
+	for i, node := range p.nodes {
+		node.seq = i
+
+		indeg := 0
+		for _, port := range node.ports {
+			indeg += len(port.inEdges)
+		}
+		if indeg == 0 {
+			p.sources = append(p.sources, node)
+		}
+	}
+
+	for _, src := range p.sources {
+		p.dfs(src, 0, src.seq)
+	}
+
+	// run a dfs again on unvisited nodes
+	for i := range p.visited {
+		if p.visited[i] == -1 {
+			// this is possible because node.seq is equal to its position in the list
+			// and visited is indexed with node.seq
+			n := p.nodes[i]
+			p.dfs(n, 0, n.seq)
+		}
+	}
+
+	// remember edges to avoid modifying slices in place
+	rev := make([]*Edge, 0)
+
+	for _, node := range p.nodes {
+		for _, port := range node.ports {
+			for _, edge := range port.outEdges {
+				target := edge.target.owner
+				if target.id == node.id {
+					continue
+				}
+				// when the connected nodes belong to the same tree and the target was seen before the source
+				if p.roots[node.seq] == p.roots[target.seq] && p.visited[target.seq] < p.visited[node.seq] {
+					rev = append(rev, edge)
+					graph.isCyclic = true
+				}
+			}
+		}
+	}
+
+	for _, edge := range rev {
+		edge.reverse()
+	}
+}
+
+func (p *depthFirstCycleBreaker) dfs(node *Node, depth int, rootSeq int) {
+	if p.visited[node.seq] != -1 {
+		return
+	}
+
+	p.visited[node.seq] = depth // remember at which depth this node is seen
+	p.roots[node.seq] = rootSeq // remember at which root node this dfs started
+
+	for _, port := range node.ports {
+		for _, edge := range port.outEdges {
+			target := edge.target.owner
+			if target.id == node.id {
+				continue
+			}
+			p.dfs(target, depth+1, rootSeq)
+		}
+	}
 }

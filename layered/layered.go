@@ -43,9 +43,6 @@ func Layout(root *graphly.Node, opts Options) {
 	asm.addPhase(phase1_CYCLE_BREAKING, layeredPhase1Factory(opts.CycleBreakingStrategy))
 	// todo add post-processing step restore reversed edges after p5
 
-	// for p in asm.algorithm [list of processors]
-	// p(graph)
-
 	for _, comp := range components {
 		for _, processor := range asm.algorithm() {
 			processor.process(comp)

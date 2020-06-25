@@ -1,5 +1,16 @@
 package graphly
 
+import "encoding/json"
+
+func FromJson(src []byte, name string) *Node {
+	root := &Node{}
+	if err := json.Unmarshal(src, root); err != nil {
+		panic(err)
+	}
+	root.ID = name
+	return root
+}
+
 type Size struct {
 	Width  float32 `json:"width"`
 	Height float32 `json:"height"`

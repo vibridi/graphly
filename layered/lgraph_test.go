@@ -3,14 +3,17 @@ package layered
 import (
 	"testing"
 
+	"github.com/vibridi/graphly"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/vibridi/graphly/internal"
 )
 
 func TestToLayeredGraph(t *testing.T) {
-	gs := internal.ReadTestFilesFirstn(internal.DirFlattened, 5)
+	cases := internal.ReadTestFilesFirstn(dirFlattened, 5)
 
-	for _, g := range gs {
+	for _, test := range cases {
+		g := graphly.FromJson(test.Data, test.Name)
 		adj := g.AdjacencyList()
 		lg := toLayeredGraph(g)
 
@@ -44,8 +47,8 @@ func TestToLayeredGraph(t *testing.T) {
 }
 
 func TestSplit(t *testing.T) {
-	g := internal.ReadTestFile(internal.DirCyclic, "aspect_cartrackingattackmodeling_CarTrackingAttackModeling.json")
-	lg := toLayeredGraph(g)
+	test := internal.ReadTestFile(dirCyclic, "aspect_cartrackingattackmodeling_CarTrackingAttackModeling.json")
+	lg := toLayeredGraph(graphly.FromJson(test.Data, test.Name))
 
 	parts := split(lg)
 	assert.Len(t, parts, 5)

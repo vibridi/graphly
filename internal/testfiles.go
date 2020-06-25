@@ -1,60 +1,55 @@
 package internal
 
 import (
-	"encoding/json"
 	"io/ioutil"
-
-	"github.com/vibridi/graphly"
 )
 
-const (
-	DirFlattened = "../internal/test/elk/flattened"
-	DirCyclic    = "../internal/test/elk/cyclic"
-)
+type GraphData struct {
+	Data []byte
+	Name string
+}
 
-func ReadTestFile(dir, name string) *graphly.Node {
+func ReadTestFile(dir, name string) *GraphData {
 	f, err := ioutil.ReadFile(dir + "/" + name)
 	if err != nil {
 		panic(err)
 	}
-	root := &graphly.Node{}
-	if err := json.Unmarshal(f, root); err != nil {
-		panic(err)
+	return &GraphData{
+		Data: f,
+		Name: name,
 	}
-	root.ID = name
-	return root
 }
 
-func ReadTestFilesFirstn(dir string, n int) []*graphly.Node {
+func ReadTestFilesFirstn(dir string, n int) []*GraphData {
 	fs, err := ioutil.ReadDir(dir)
 	if err != nil {
 		panic(err)
 	}
-	graphs := make([]*graphly.Node, n)
+	graphs := make([]*GraphData, n)
 	for i := 0; i < n; i++ {
 		graphs[i] = ReadTestFile(dir, fs[i].Name())
 	}
 	return graphs
 }
 
-func ReadTestFilesRandn(dir string, n int) []*graphly.Node {
+func ReadTestFilesRandn(dir string, n int) []*GraphData {
 	fs, err := ioutil.ReadDir(dir)
 	if err != nil {
 		panic(err)
 	}
-	graphs := make([]*graphly.Node, n)
+	graphs := make([]*GraphData, n)
 	for i := 0; i < n; i++ {
 		graphs[i] = ReadTestFile(dir, fs[RandInt(len(fs))].Name())
 	}
 	return graphs
 }
 
-func ReadTestFilesAll(dir string) []*graphly.Node {
+func ReadTestFilesAll(dir string) []*GraphData {
 	fs, err := ioutil.ReadDir(dir)
 	if err != nil {
 		panic(err)
 	}
-	graphs := make([]*graphly.Node, len(fs))
+	graphs := make([]*GraphData, len(fs))
 	for i, f := range fs {
 		graphs[i] = ReadTestFile(dir, f.Name())
 	}
